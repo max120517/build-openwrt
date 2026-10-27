@@ -1,4 +1,4 @@
-name: 通用设备编译固件
+name: 7981
 
 on:
   workflow_dispatch:
