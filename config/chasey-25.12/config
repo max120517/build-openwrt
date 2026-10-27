@@ -78,16 +78,21 @@ CONFIG_PACKAGE_kmod-tun=y
 CONFIG_PACKAGE_kmod-warp=y
 CONFIG_PACKAGE_kmod-zram=y
 
-# mwan3 核心依赖
+# --- mwan3 及其核心网络依赖 ---
 CONFIG_PACKAGE_kmod-ipt-core=y
 CONFIG_PACKAGE_kmod-ipt-conntrack=y
 CONFIG_PACKAGE_kmod-ipt-conntrack-extra=y
 CONFIG_PACKAGE_kmod-ipt-ipopt=y
 CONFIG_PACKAGE_kmod-ipt-ipset=y
 CONFIG_PACKAGE_kmod-ip6tables=y
+CONFIG_PACKAGE_kmod-macvlan=y
 CONFIG_PACKAGE_ipset=y
+CONFIG_PACKAGE_ip-full=y
 CONFIG_PACKAGE_iptables-mod-conntrack-extra=y
 CONFIG_PACKAGE_iptables-mod-ipopt=y
+
+# --- 分区写保护解锁 (mtd-rw) ---
+CONFIG_PACKAGE_kmod-mtd-rw=y
 
 #######################################################################
 #                            WIFI OPTIONS                             #
@@ -214,7 +219,7 @@ CONFIG_PACKAGE_luci-i18n-base-zh-cn=y
 CONFIG_PACKAGE_luci-i18n-firewall-zh-cn=y
 CONFIG_PACKAGE_luci-i18n-opkg-zh-cn=y
 
-# === 主题（解决你的痛点） ===
+# === 主题 (Argon) ===
 CONFIG_PACKAGE_luci-theme-argon=y
 CONFIG_PACKAGE_luci-app-argon-config=y
 CONFIG_PACKAGE_luci-theme-bootstrap-mod=y
@@ -223,6 +228,16 @@ CONFIG_PACKAGE_luci-theme-bootstrap-mod=y
 CONFIG_PACKAGE_mwan3=y
 CONFIG_PACKAGE_luci-app-mwan3=y
 CONFIG_PACKAGE_luci-i18n-mwan3-zh-cn=y
+
+# === 核心网络与脚本环境（各类插件的基础依赖） ===
+CONFIG_PACKAGE_dnsmasq-full=y
+CONFIG_PACKAGE_bash=y
+CONFIG_PACKAGE_curl=y
+CONFIG_PACKAGE_libcurl=y
+CONFIG_PACKAGE_vim=y
+CONFIG_PACKAGE_tar=y
+CONFIG_PACKAGE_gzip=y
+CONFIG_PACKAGE_unzip=y
 
 # === MTK 闭源专属界面与加速 ===
 CONFIG_PACKAGE_datconf=y
