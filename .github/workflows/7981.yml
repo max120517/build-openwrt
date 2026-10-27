@@ -1,179 +1,65 @@
 name: 通用设备编译固件
 
 on:
-  repository_dispatch:
   workflow_dispatch:
     inputs:
       source_branch:
         description: "Select the source branch"
-        required: false
+        required: true
         default: "chasey-25.12"
         type: choice
         options:
           - chasey-25.12
-          - openwrt-main
-          - lede-master
-          - immortalwrt-master
-          - Lienol-master
 
 env:
-  FEEDS_CONF: config/${{ inputs.source_branch }}/feeds.conf.default
   CONFIG_FILE: config/${{ inputs.source_branch }}/config
-  DIY_P1_SH: config/${{ inputs.source_branch }}/diy-part1.sh
-  DIY_P2_SH: config/${{ inputs.source_branch }}/diy-part2.sh
-  UPLOAD_BIN_DIR: true
-  UPLOAD_FIRMWARE: true
-  UPLOAD_RELEASE: true
   TZ: Asia/Shanghai
 
 jobs:
   build:
     runs-on: ubuntu-22.04
-
     steps:
       - name: Checkout
-        uses: actions/checkout@main
+        uses: actions/checkout@v4
 
       - name: Initialization environment
-        id: init
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
-          docker rmi `docker images -q`
-          [[ -n "${AGENT_TOOLSDIRECTORY}" ]] && sudo rm -rf "${AGENT_TOOLSDIRECTORY}"
-          sudo rm -rf /usr/share/dotnet /etc/apt/sources.list.d /usr/local/lib/android 2>/dev/null
           sudo -E apt-get -y update
-          sudo -E apt-get -y purge azure-cli ghc* zulu* llvm* firefox google* dotnet* powershell openjdk* mongodb* moby* || true
-          sudo -E apt-get -y install $(curl -fsSL https://is.gd/depend_ubuntu2204_openwrt)
-          sudo -E systemctl daemon-reload
-          sudo -E apt-get -y autoremove --purge
-          sudo -E apt-get clean
-          sudo mkdir -p /workdir
-          sudo chown ${USER}:${GROUPS} /workdir
-          sudo timedatectl set-timezone "${TZ}"
-          echo "status=success" >> ${GITHUB_OUTPUT}
+          sudo -E apt-get -y install build-essential libncurses5-dev gawk git libssl-dev zlib1g-dev wget curl python3 python3-pip rsync unzip
 
       - name: Clone source code
-        id: codes
-        working-directory: /workdir
-        if: ${{ steps.init.outputs.status }} == 'success' && !cancelled()
         run: |
-          if [[ "${{ inputs.source_branch }}" == "chasey-25.12" ]]; then
-              REPO_URL="https://github.com/chasey-dev/immortalwrt-mt798x-rebase.git"
-              REPO_BRANCH="25.12"
-              TAGS_NAME="chasey-immortalwrt-mt798x-rebase-25.12"
-          elif [[ "${{ inputs.source_branch }}" == *"openwrt"* ]]; then
-              REPO_URL="https://github.com/openwrt/openwrt"
-              REPO_BRANCH="main"
-              TAGS_NAME="official"
-          elif [[ "${{ inputs.source_branch }}" == *"lede"* ]]; then
-              REPO_URL="https://github.com/coolsnowwolf/lede"
-              REPO_BRANCH="master"
-              TAGS_NAME="lede"
-          elif [[ "${{ inputs.source_branch }}" == *"immortalwrt"* ]]; then
-              REPO_URL="https://github.com/immortalwrt/immortalwrt"
-              REPO_BRANCH="master"
-              TAGS_NAME="immortalwrt"
-          elif [[ "${{ inputs.source_branch }}" == *"Lienol"* ]]; then
-              REPO_URL="https://github.com/Lienol/openwrt"
-              REPO_BRANCH="22.03"
-              TAGS_NAME="Lienol"
-          else
-              echo "Unknown source code repository."
-              exit 1
-          fi
-
-          git clone -q --single-branch --depth=1 --branch=${REPO_BRANCH} ${REPO_URL} openwrt
-          ln -sf /workdir/openwrt ${GITHUB_WORKSPACE}/openwrt
-
-          echo "build_tag=OpenWrt_${TAGS_NAME}_$(date +"%Y.%m")" >> ${GITHUB_OUTPUT}
-          echo "status=success" >> ${GITHUB_OUTPUT}
-
-      - name: Load custom feeds
-        run: |
-          [[ -f "${FEEDS_CONF}" ]] && cp -f ${FEEDS_CONF} openwrt/feeds.conf.default
-          if [[ -f "${DIY_P1_SH}" ]]; then
-            chmod +x "${DIY_P1_SH}"
-            cd openwrt/
-            "${GITHUB_WORKSPACE}/${DIY_P1_SH}"
-          else
-            echo "DIY_P1_SH not found, skip."
-          fi
-
-      - name: Update feeds
-        run: cd openwrt/ && ./scripts/feeds update -a
-
-      - name: Install feeds
-        run: cd openwrt/ && ./scripts/feeds install -a
+          git clone -q --single-branch --depth=1 --branch=25.12 https://github.com/chasey-dev/immortalwrt-mt798x-rebase.git openwrt
+          echo "源码克隆完成"
 
       - name: Load custom configuration
         run: |
-          [[ -d "files" ]] && mv -f files openwrt/files
-          [[ -e "${CONFIG_FILE}" ]] && cp -f ${CONFIG_FILE} openwrt/.config
-          if [[ -f "${DIY_P2_SH}" ]]; then
-            chmod +x "${DIY_P2_SH}"
-            cd openwrt/
-            "${GITHUB_WORKSPACE}/${DIY_P2_SH}"
-          else
-            echo "DIY_P2_SH not found, skip."
-          fi
+          cp -f ${CONFIG_FILE} openwrt/.config
+
+      - name: Update feeds
+        run: |
+          cd openwrt
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
 
       - name: Download package
-        id: package
         run: |
-          cd openwrt/
+          cd openwrt
           make defconfig
           make download -j8
-          find dl -size -1024c -exec ls -l {} \;
-          find dl -size -1024c -exec rm -f {} \;
 
       - name: Compile the OpenWrt
         id: compile
         run: |
-          cd openwrt/
-          echo -e "$(nproc) thread compile"
-          make -j$(($(nproc) + 1)) V=s || make -j1 || make -j1 V=s
-          echo "status=success" >> ${GITHUB_OUTPUT}
-
-      - name: Upload bin directory
-        uses: actions/upload-artifact@main
-        if: steps.compile.outputs.status == 'success' && env.UPLOAD_BIN_DIR == 'true'
-        with:
-          name: OpenWrt_bin
-          path: openwrt/bin
-
-      - name: Organize files
-        id: organize
-        if: env.UPLOAD_FIRMWARE == 'true' && !cancelled()
-        run: |
-          cd openwrt/bin/targets/*/*
-          rm -rf packages
-          echo "FIRMWARE=$PWD" >> $GITHUB_ENV
-          echo "status=success" >> $GITHUB_OUTPUT
+          cd openwrt
+          echo "开始编译，使用多线程..."
+          make -j$(($(nproc) + 1)) V=s || make -j1 V=s
+          echo "编译完成"
 
       - name: Upload firmware directory
-        uses: actions/upload-artifact@main
-        if: steps.organize.outputs.status == 'success' && !cancelled()
+        uses: actions/upload-artifact@v4
         with:
           name: OpenWrt_firmware
-          path: ${{ env.FIRMWARE }}
-
-      - name: Generate release tag
-        id: tag
-        if: env.UPLOAD_RELEASE == 'true' && !cancelled()
-        run: |
-          echo "release_tag=$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
-          touch release.txt
-          echo "默认IP: 192.168.1.1" >> release.txt
-          echo "默认密码: password" >> release.txt
-          echo "status=success" >> $GITHUB_OUTPUT
-
-      - name: Upload firmware to release
-        uses: softprops/action-gh-release@v1
-        if: steps.tag.outputs.status == 'success' && !cancelled()
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ steps.tag.outputs.release_tag }}
-          body_path: release.txt
-          files: ${{ env.FIRMWARE }}/*
+          path: openwrt/bin/targets/*/*
