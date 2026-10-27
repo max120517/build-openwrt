@@ -1,4 +1,4 @@
-name: 7981
+name: 通用设备编译固件
 
 on:
   workflow_dispatch:
@@ -34,6 +34,22 @@ jobs:
           git clone -q --single-branch --depth=1 --branch=25.12 https://github.com/chasey-dev/immortalwrt-mt798x-rebase.git openwrt
           echo "源码克隆完成"
 
+      # 👇 新增步骤：单独替换 112M 的 DTS 文件 👇
+      - name: Replace 112M DTS
+        run: |
+          cd openwrt
+          # 寻找 chasey 源码中原本期望的 DTS 文件名
+          DTS_FILE=$(find target/linux/mediatek/dts/ -name "*wr30u*112m*" | head -n 1)
+          if [ -n "$DTS_FILE" ]; then
+            echo "找到原 DTS: $DTS_FILE，准备替换..."
+            wget -qO "$DTS_FILE" https://raw.githubusercontent.com/hanwckf/immortalwrt-mt798x/openwrt-21.02/target/linux/mediatek/files-5.4/arch/arm64/boot/dts/mediatek/mt7981-xiaomi-mi-router-wr30u-112m.dts
+            echo "已成功替换为 hanwckf 的 DTS！"
+          else
+            echo "未找到原 DTS，尝试直接下载并指定文件名..."
+            wget -qO target/linux/mediatek/dts/mt7981b-xiaomi-mi-router-wr30u-112m-nmbm.dts https://raw.githubusercontent.com/hanwckf/immortalwrt-mt798x/openwrt-21.02/target/linux/mediatek/files-5.4/arch/arm64/boot/dts/mediatek/mt7981-xiaomi-mi-router-wr30u-112m.dts
+          fi
+      # 👆 新增步骤结束 👆
+
       - name: Load custom configuration
         run: |
           cp -f ${CONFIG_FILE} openwrt/.config
@@ -57,6 +73,14 @@ jobs:
           echo "开始编译，使用多线程..."
           make -j$(($(nproc) + 1)) V=s || make -j1 V=s
           echo "编译完成"
+
+      - name: Check firmware
+        run: |
+          ls -lh openwrt/bin/targets/*/*/
+          if ! ls openwrt/bin/targets/*/*/*.itb openwrt/bin/targets/*/*/*.bin 2>/dev/null; then
+            echo "🚨 编译失败：没有生成 .itb 或 .bin 固件文件！"
+            exit 1
+          fi
 
       - name: Upload firmware directory
         uses: actions/upload-artifact@v4
