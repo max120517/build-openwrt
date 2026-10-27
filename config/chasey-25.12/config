@@ -6,10 +6,8 @@ CONFIG_TARGET_MULTI_PROFILE=y
 #                            DEVICES                                  #
 #######################################################################
 
-CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_xiaomi_mi-router-wr30u-ubootmod=y
-CONFIG_TARGET_DEVICE_PACKAGES_mediatek_filogic_DEVICE_xiaomi_mi-router-wr30u-ubootmod=""
-CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_xiaomi_mi-router-wr30u-stock=y
-CONFIG_TARGET_DEVICE_PACKAGES_mediatek_filogic_DEVICE_xiaomi_mi-router-wr30u-stock=""
+CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_xiaomi_mi-router-wr30u-112m-nmbm=y
+CONFIG_TARGET_DEVICE_PACKAGES_mediatek_filogic_DEVICE_xiaomi_mi-router-wr30u-112m-nmbm=""
 
 CONFIG_DEVEL=y
 CONFIG_TOOLCHAINOPTS=y
