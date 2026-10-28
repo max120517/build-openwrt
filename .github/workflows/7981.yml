@@ -34,58 +34,45 @@ jobs:
           git clone -q --single-branch --depth=1 --branch=25.12 https://github.com/chasey-dev/immortalwrt-mt798x-rebase.git openwrt
           echo "源码克隆完成"
 
-      - name: Load custom configuration
-        run: |
-          cp -f ${CONFIG_FILE} openwrt/.config
-
       - name: Update feeds
         run: |
           cd openwrt
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-      - name: Download package
+      # 👇 检查包到底存不存在 👇
+      - name: Check if packages exist in source
         run: |
           cd openwrt
-          make defconfig
-          make download -j8
-
-      - name: Verify config (检查配置是否生效)
-        run: |
-          cd openwrt
-          echo "========== 检查最终生成的 .config =========="
-          if grep -q "CONFIG_PACKAGE_luci-theme-argon=y" .config; then
-            echo "✅ 成功：Argon 主题已包含！"
-          else
-            echo "❌ 失败：Argon 主题被系统剔除了！"
-          fi
-          
-          if grep -q "CONFIG_PACKAGE_mwan3=y" .config; then
-            echo "✅ 成功：mwan3 已包含！"
-          else
-            echo "❌ 失败：mwan3 被系统剔除了！"
-          fi
-
-          if grep -q "CONFIG_PACKAGE_kmod-mtd-rw=y" .config; then
-            echo "✅ 成功：kmod-mtd-rw 已包含！"
-          else
-            echo "❌ 失败：kmod-mtd-rw 被系统剔除了！"
-          fi
+          echo "========== 检查源码中是否有这些包 =========="
+          if [ -d "package/feeds/luci/luci-theme-argon" ]; then echo "✅ Argon 源码存在"; else echo "❌ Argon 源码不在 feed 里！"; fi
+          if [ -d "package/feeds/packages/mwan3" ]; then echo "✅ mwan3 源码存在"; else echo "❌ mwan3 源码不在 feed 里！"; fi
+          if [ -d "package/kernel/mtd-rw" ]; then echo "✅ mtd-rw 源码存在"; else echo "❌ mtd-rw 源码不存在！"; fi
           echo "=========================================="
+
+      - name: Load custom configuration
+        run: |
+          cd openwrt
+          cp -f ${GITHUB_WORKSPACE}/${CONFIG_FILE} .config
+          
+          # 核心操作：强行把这三个包追加到配置末尾，并且再跑一次 defconfig
+          echo "CONFIG_PACKAGE_luci-theme-argon=y" >> .config
+          echo "CONFIG_PACKAGE_mwan3=y" >> .config
+          echo "CONFIG_PACKAGE_luci-app-mwan3=y" >> .config
+          echo "CONFIG_PACKAGE_kmod-mtd-rw=y" >> .config
+          
+          echo "========== 跑 make defconfig 看看会不会吃包 =========="
+          # 这里会打印出到底是因为缺什么依赖导致了被吃
+          make defconfig V=s 2>&1 | tee defconfig.log
+          
+          echo "========== 检查最终生成的 .config =========="
+          grep -q "CONFIG_PACKAGE_luci-theme-argon=y" .config && echo "✅ Argon 保留了" || echo "❌ Argon 被吃掉了"
+          grep -q "CONFIG_PACKAGE_mwan3=y" .config && echo "✅ mwan3 保留了" || echo "❌ mwan3 被吃掉了"
+          grep -q "CONFIG_PACKAGE_kmod-mtd-rw=y" .config && echo "✅ mtd-rw 保留了" || echo "❌ mtd-rw 被吃掉了"
 
       - name: Compile the OpenWrt
         id: compile
         run: |
           cd openwrt
-          echo "开始编译，使用多线程..."
+          echo "开始编译..."
           make -j$(($(nproc) + 1)) V=s || make -j1 V=s
-          echo "编译完成"
-
-      - name: Upload firmware and packages
-        uses: actions/upload-artifact@v4
-        with:
-          name: OpenWrt_firmware_and_ipk
-          path: |
-            openwrt/bin/targets/*/*/*.itb
-            openwrt/bin/targets/*/*/*.bin
-            openwrt/bin/targets/*/*/packages/
