@@ -32,62 +32,67 @@ jobs:
       - name: Clone source code
         run: |
           git clone -q --single-branch --depth=1 --branch=25.12 https://github.com/chasey-dev/immortalwrt-mt798x-rebase.git openwrt
-          echo "源码克隆完成"
+          echo "[INFO] Source code cloned."
 
       - name: Update feeds
         run: |
           cd openwrt
           ./scripts/feeds update -a
           ./scripts/feeds install -a
+          echo "[INFO] Feeds updated."
 
-      # 👇 外科手术：拔除引起冲突的 weechat 插件，并拉取 mtd-rw 源码 👇
       - name: Fix source dependencies
         run: |
           cd openwrt
-          echo "========== 修复循环依赖 =========="
-          # 直接删除引起循环依赖的文件夹
+          echo "[INFO] Removing weechat to prevent recursive dependency..."
           rm -rf package/feeds/luci/luci-app-weechat
-          # 清理配置缓存
           rm -rf tmp/
           
-          echo "========== 下载 kmod-mtd-rw 源码 =========="
-          # 从 OpenWrt 官方 packages 仓库直接拉取 mtd-rw
+          echo "[INFO] Fetching kmod-mtd-rw source..."
           git clone --depth=1 https://github.com/openwrt/packages.git package/kernel/mtd-rw-tmp
           mv package/kernel/mtd-rw-tmp/kernel/mtd-rw package/kernel/mtd-rw
           rm -rf package/kernel/mtd-rw-tmp
-          
+
       - name: Load custom configuration
         run: |
           cd openwrt
           cp -f ${GITHUB_WORKSPACE}/${CONFIG_FILE} .config
           
-          # 强行确保这三个包被选中
+          # 强行确保这两个包被选中 (不包含 mwan3)
           echo "CONFIG_PACKAGE_luci-theme-argon=y" >> .config
-          echo "CONFIG_PACKAGE_mwan3=y" >> .config
-          echo "CONFIG_PACKAGE_luci-app-mwan3=y" >> .config
           echo "CONFIG_PACKAGE_kmod-mtd-rw=y" >> .config
           
-          echo "========== 再次跑 make defconfig =========="
+          echo "[INFO] Running make defconfig..."
           make defconfig
           
-          echo "========== 最终检查 =========="
-          grep -q "CONFIG_PACKAGE_luci-theme-argon=y" .config && echo "✅ Argon 保留" || echo "❌ Argon 丢失"
-          grep -q "CONFIG_PACKAGE_mwan3=y" .config && echo "✅ mwan3 保留" || echo "❌ mwan3 丢失"
-          grep -q "CONFIG_PACKAGE_kmod-mtd-rw=y" .config && echo "✅ mtd-rw 保留" || echo "❌ mtd-rw 丢失"
+          echo "[INFO] Verifying target configuration..."
+          if grep -q "CONFIG_PACKAGE_luci-theme-argon=y" .config; then echo "[SUCCESS] Argon theme is included."; else echo "[ERROR] Argon theme was removed."; fi
+          if grep -q "CONFIG_PACKAGE_kmod-mtd-rw=y" .config; then echo "[SUCCESS] mtd-rw is included."; else echo "[ERROR] mtd-rw was removed."; fi
+          if grep -q "CONFIG_PACKAGE_kmod-mt_wifi=y" .config; then echo "[SUCCESS] MTK Wi-Fi driver is included."; else echo "[ERROR] MTK Wi-Fi driver is missing."; fi
+          if grep -q "CONFIG_PACKAGE_kmod-macvlan=y" .config; then echo "[SUCCESS] mwan3 base dependency is included."; else echo "[ERROR] mwan3 dependency is missing."; fi
 
       - name: Compile the OpenWrt
         id: compile
         run: |
           cd openwrt
           make download -j8
-          echo "开始编译，使用多线程..."
+          echo "[INFO] Starting compilation with multi-threading..."
           make -j$(($(nproc) + 1)) V=s || make -j1 V=s
-          echo "编译完成"
+          echo "[INFO] Compilation finished."
+
+      - name: Check firmware output
+        run: |
+          ls -lh openwrt/bin/targets/*/*/
+          if ! ls openwrt/bin/targets/*/*/*.itb openwrt/bin/targets/*/*/*.bin 2>/dev/null; then
+            echo "[ERROR] Build failed: No firmware file generated. Aborting upload."
+            exit 1
+          fi
+          echo "[INFO] Firmware files verified."
 
       - name: Upload firmware and packages
         uses: actions/upload-artifact@v4
         with:
-          name: OpenWrt_firmware_and_ipk
+          name: OpenWrt_firmware_and_packages
           path: |
             openwrt/bin/targets/*/*/*.itb
             openwrt/bin/targets/*/*/*.bin
